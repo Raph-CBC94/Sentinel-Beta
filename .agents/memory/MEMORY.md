@@ -1,0 +1,1 @@
+- [Conversation transfer files](conversation-transfer-files.md) — after a project handoff, imported files may remain under `.local/conversation-workspace/files` until restored into the project root.

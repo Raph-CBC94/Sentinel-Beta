@@ -100,6 +100,8 @@ async function buildAll() {
       "puppeteer",
       "puppeteer-core",
       "electron",
+      "discord.js",
+      "@supabase/supabase-js",
     ],
     sourcemap: "linked",
     plugins: [

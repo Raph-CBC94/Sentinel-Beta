@@ -1,6 +1,6 @@
-# [Project name]
+# Discord Sanctions Bot
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Bot Discord de modération avec avertissements, mises en sourdine, historique persistant et logs détaillés dans Supabase.
 
 ## Run & Operate
 
@@ -9,7 +9,12 @@ _Replace the heading above with the project's name, and this line with one sente
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `pnpm --filter @workspace/api-server run typecheck` — verify the bot and API types
+- `pnpm --filter @workspace/api-server run build` — build the long-running Discord worker/API service
+- Apply `supabase/schema.sql` once in the Supabase SQL editor before starting the bot.
+- Required env: `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+- Permission env: `WARN_ROLE_IDS`, `TIMEOUT_ROLE_IDS`, `REMOVE_WARNING_ROLE_IDS` (comma-separated role IDs)
+- Optional env: `LOG_CHANNEL_ID`
 
 ## Stack
 
@@ -22,15 +27,22 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/api-server/src/discord/` — Discord client, slash commands, permission checks, and Supabase persistence
+- `supabase/schema.sql` — source of truth for sanction and audit-event tables
+- `.env.example` — required configuration names without secret values
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The Discord gateway runs in the existing API service, which also keeps a health endpoint for worker hosting.
+- Permission checks use explicit role-ID allowlists per action; Discord administrator permissions do not bypass these lists.
+- Sanctions are written to Supabase before public confirmation; failed timeout applications remain auditable with `failed` status.
+- Discord messages are best-effort notifications: a blocked DM never prevents the sanction or database record.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- `/avertir` ajoute un avertissement, envoie un message public, tente un message privé et écrit un journal détaillé.
+- `/sourdine` et `/retirer-sourdine` gèrent les mises en sourdine avec une durée limitée.
+- `/historique` affiche l'historique complet des avertissements et mises en sourdine, tandis que `/retirer-avertissement` retire un avertissement précis par référence.
 
 ## User preferences
 
@@ -38,7 +50,10 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Discord slash commands are registered for `DISCORD_GUILD_ID` on every bot start.
+- The bot needs the `Moderate Members`, `Send Messages`, `Embed Links`, and `View Channel` permissions.
+- The bot application must be invited to `DISCORD_GUILD_ID` with both `bot` and `applications.commands` scopes before slash-command registration can succeed.
+- Apply `supabase/schema.sql` before starting the service or every command will fail at persistence.
 
 ## Pointers
 
