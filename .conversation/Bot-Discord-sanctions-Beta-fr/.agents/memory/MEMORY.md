@@ -1,0 +1,1 @@
+- [Discord worker hosting](discord-worker-hosting.md) — gateway bots need an always-on worker; Vercel is suitable only for an optional HTTP dashboard.
