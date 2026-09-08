@@ -42,7 +42,7 @@ Bot Discord de modération avec avertissements, mises en sourdine, historique pe
 
 - `/avertir` ajoute un avertissement, envoie un message public, tente un message privé et écrit un journal détaillé.
 - `/sourdine` et `/retirer-sourdine` gèrent les mises en sourdine avec une durée limitée.
-- `/historique` affiche l'historique complet des avertissements et mises en sourdine, tandis que `/retirer-avertissement` retire un avertissement précis par référence.
+- `/historique` affiche l'historique complet des avertissements et mises en sourdine, tandis que `/retirer-avertissement` permet de choisir directement un avertissement actif dans un menu.
 
 ## User preferences
 

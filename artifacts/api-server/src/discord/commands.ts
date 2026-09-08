@@ -1,17 +1,20 @@
 import {
+  ActionRowBuilder,
   ChatInputCommandInteraction,
+  ComponentType,
   EmbedBuilder,
   GuildMember,
   REST,
   Routes,
   SlashCommandBuilder,
+  StringSelectMenuBuilder,
+  StringSelectMenuInteraction,
   TextChannel,
 } from "discord.js";
 import { logger } from "../lib/logger";
 import { getBotConfig, type BotConfig } from "./config";
 import {
   createSanction,
-  findWarningByReference,
   getMemberHistory,
   recordEvent,
   removeWarning,
@@ -76,16 +79,9 @@ export const commandDefinitions = [
     ),
   new SlashCommandBuilder()
     .setName("retirer-avertissement")
-    .setDescription("Retirer un avertissement précis")
+    .setDescription("Choisir l'avertissement à retirer")
     .addUserOption((option) =>
       option.setName("membre").setDescription("Membre concerné").setRequired(true),
-    )
-    .addStringOption((option) =>
-      option
-        .setName("avertissement")
-        .setDescription("Référence affichée dans l'historique")
-        .setMaxLength(36)
-        .setRequired(true),
     ),
 ].map((command) => command.toJSON());
 
@@ -163,6 +159,17 @@ function referenceFor(sanction: Sanction): string {
 
 function formatDate(value: string): string {
   return `<t:${Math.floor(new Date(value).getTime() / 1000)}:f>`;
+}
+
+function formatSelectionDate(value: string): string {
+  return new Intl.DateTimeFormat("fr-FR", {
+    dateStyle: "short",
+  }).format(new Date(value));
+}
+
+function formatSelectionDescription(sanction: Sanction): string {
+  const reason = sanction.reason.replace(/\s+/g, " ").trim();
+  return `${reason} · ${formatSelectionDate(sanction.created_at)}`.slice(0, 100);
 }
 
 async function notifyMember(
@@ -454,25 +461,86 @@ async function handleRemoveWarning(
   );
   if (!moderator) return;
   const member = getGuildMember(interaction);
-  const reference = interaction.options.getString("avertissement", true);
 
   if (!member) {
     await interaction.reply({ content: "Ce membre n'est plus présent sur le serveur.", ephemeral: true });
     return;
   }
 
-  const warning = await findWarningByReference(interaction.guildId!, member.id, reference);
-  if (!warning) {
+  const activeWarnings = (await getMemberHistory(interaction.guildId!, member.id)).filter(
+    (sanction) => sanction.type === "warning" && sanction.status === "applied",
+  );
+  if (activeWarnings.length === 0) {
     await interaction.reply({
-      content: "Aucun avertissement actif ne correspond à cette référence pour ce membre.",
+      content: `<@${member.id}> ne possède aucun avertissement actif à retirer.`,
       ephemeral: true,
     });
     return;
   }
 
-  const removed = await removeWarning(warning.id, moderator.id);
+  const visibleWarnings = activeWarnings.slice(0, 125);
+  const rows = [];
+  for (let index = 0; index < visibleWarnings.length; index += 25) {
+    const options = visibleWarnings.slice(index, index + 25).map((warning) => ({
+      label: `Avertissement ${referenceFor(warning)}`,
+      description: formatSelectionDescription(warning),
+      value: warning.id,
+    }));
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId(`retirer-avertissement:${interaction.id}:${index / 25}`)
+      .setPlaceholder("Choisissez un avertissement à retirer")
+      .addOptions(options);
+    rows.push(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu));
+  }
+
   await interaction.reply({
+    content:
+      visibleWarnings.length < activeWarnings.length
+        ? "Choisissez l'avertissement à retirer parmi les 125 plus récents :"
+        : "Choisissez l'avertissement à retirer :",
+    components: rows,
+    ephemeral: true,
+  });
+
+  const reply = await interaction.fetchReply();
+  let selection: StringSelectMenuInteraction;
+  try {
+    const collector = reply.createMessageComponentCollector({
+      componentType: ComponentType.StringSelect,
+      time: 60_000,
+      filter: (component) =>
+        component.user.id === moderator.id &&
+        component.customId.startsWith(`retirer-avertissement:${interaction.id}:`),
+    });
+    selection = await new Promise<StringSelectMenuInteraction>((resolve, reject) => {
+      collector.once("collect", resolve);
+      collector.once("end", (_collected, reason) => {
+        if (reason === "time") reject(new Error("selection_timeout"));
+      });
+    });
+  } catch {
+    await interaction
+      .editReply({
+        content: "La sélection a expiré. Relancez la commande pour choisir un avertissement.",
+        components: [],
+      })
+      .catch(() => undefined);
+    return;
+  }
+
+  const warning = activeWarnings.find((sanction) => sanction.id === selection.values[0]);
+  if (!warning) {
+    await selection.update({
+      content: "Cet avertissement n'est plus disponible. Relancez la commande.",
+      components: [],
+    });
+    return;
+  }
+
+  const removed = await removeWarning(warning.id, moderator.id);
+  await selection.update({
     content: `L'avertissement ${referenceFor(removed)} de <@${member.id}> a été retiré.`,
+    components: [],
   });
   await sendLog(
     interaction,
