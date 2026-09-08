@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Sentinel Website"
+description = "A small French landing page for the Sentinel Discord moderation bot, ready to deploy as a static site on Vercel."
+version = "1.0.0"
+id = "artifacts/sentinel-website"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22008
+
+[services.development]
+run = "pnpm --filter @workspace/sentinel-website run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/sentinel-website", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/sentinel-website/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22008"
+BASE_PATH = "/"
