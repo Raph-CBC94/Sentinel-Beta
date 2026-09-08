@@ -15,8 +15,8 @@ export type BotConfig = {
   roles: {
     warn: string[];
     timeout: string[];
-    removeWarning: string[];
   };
+  removeWarningUserIds: string[];
 };
 
 export function getBotConfig(): BotConfig {
@@ -43,7 +43,7 @@ export function getBotConfig(): BotConfig {
     roles: {
       warn: parseRoleIds(process.env.WARN_ROLE_IDS),
       timeout: parseRoleIds(process.env.TIMEOUT_ROLE_IDS),
-      removeWarning: parseRoleIds(process.env.REMOVE_WARNING_ROLE_IDS),
     },
+    removeWarningUserIds: parseRoleIds(process.env.REMOVE_WARNING_USER_IDS),
   };
 }

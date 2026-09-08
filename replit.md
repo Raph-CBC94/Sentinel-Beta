@@ -13,7 +13,7 @@ Bot Discord de modération avec avertissements, mises en sourdine, historique pe
 - `pnpm --filter @workspace/api-server run build` — build the long-running Discord worker/API service
 - Apply `supabase/schema.sql` once in the Supabase SQL editor before starting the bot.
 - Required env: `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
-- Permission env: `WARN_ROLE_IDS`, `TIMEOUT_ROLE_IDS`, `REMOVE_WARNING_ROLE_IDS` (comma-separated role IDs)
+- Permission env: `WARN_ROLE_IDS` and `TIMEOUT_ROLE_IDS` (comma-separated role IDs), plus `REMOVE_WARNING_USER_IDS` (comma-separated user IDs)
 - Optional env: `LOG_CHANNEL_ID`
 
 ## Stack

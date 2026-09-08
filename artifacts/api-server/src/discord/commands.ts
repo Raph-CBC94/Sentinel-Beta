@@ -102,11 +102,15 @@ function hasAuthorizedRole(member: GuildMember, roleIds: string[]): boolean {
   return roleIds.length > 0 && roleIds.some((roleId) => member.roles.cache.has(roleId));
 }
 
-function hasAnyModeratorRole(member: GuildMember, config: BotConfig): boolean {
+function hasAuthorizedUser(member: GuildMember, userIds: string[]): boolean {
+  return userIds.length > 0 && userIds.includes(member.id);
+}
+
+function hasAnyModeratorAccess(member: GuildMember, config: BotConfig): boolean {
   return (
     hasAuthorizedRole(member, config.roles.warn) ||
     hasAuthorizedRole(member, config.roles.timeout) ||
-    hasAuthorizedRole(member, config.roles.removeWarning)
+    hasAuthorizedUser(member, config.removeWarningUserIds)
   );
 }
 
@@ -117,6 +121,23 @@ async function requireAuthorized(
 ): Promise<GuildMember | null> {
   const moderator = interaction.member;
   if (!(moderator instanceof GuildMember) || !hasAuthorizedRole(moderator, roleIds)) {
+    await interaction.reply({
+      content: `Vous n'êtes pas autorisé à ${action}.`,
+      ephemeral: true,
+    });
+    return null;
+  }
+
+  return moderator;
+}
+
+async function requireAuthorizedUser(
+  interaction: ChatInputCommandInteraction,
+  userIds: string[],
+  action: string,
+): Promise<GuildMember | null> {
+  const moderator = interaction.member;
+  if (!(moderator instanceof GuildMember) || !hasAuthorizedUser(moderator, userIds)) {
     await interaction.reply({
       content: `Vous n'êtes pas autorisé à ${action}.`,
       ephemeral: true,
@@ -405,7 +426,7 @@ async function handleHistory(
   config: BotConfig,
 ): Promise<void> {
   const moderator = interaction.member;
-  if (!(moderator instanceof GuildMember) || !hasAnyModeratorRole(moderator, config)) {
+  if (!(moderator instanceof GuildMember) || !hasAnyModeratorAccess(moderator, config)) {
     await interaction.reply({
       content: "Vous n'êtes pas autorisé à consulter les historiques.",
       ephemeral: true,
@@ -454,9 +475,9 @@ async function handleRemoveWarning(
   interaction: ChatInputCommandInteraction,
   config: BotConfig,
 ): Promise<void> {
-  const moderator = await requireAuthorized(
+  const moderator = await requireAuthorizedUser(
     interaction,
-    config.roles.removeWarning,
+    config.removeWarningUserIds,
     "retirer un avertissement",
   );
   if (!moderator) return;
