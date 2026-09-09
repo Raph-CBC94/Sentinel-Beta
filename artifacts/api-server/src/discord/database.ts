@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { getBotConfig } from "./config";
+import { getBotConfig } from "./config.js";
 
 export type SanctionType = "warning" | "timeout";
 export type SanctionStatus = "pending" | "applied" | "failed" | "removed";
@@ -35,7 +35,7 @@ export async function removeActiveTimeouts(guildId: string, memberId: string, mo
 export async function findWarningByReference(guildId: string, memberId: string, reference: string): Promise<Sanction | null> {
   const normalizedReference = reference.trim().replace(/^#/, "").toLowerCase();
   const { data, error } = await getDatabase().from("sanctions").select("*").eq("guild_id", guildId).eq("member_id", memberId).eq("type", "warning").limit(100).returns<Sanction[]>();
-  throwIfError(error); const matches = (data ?? []).filter((sanction) => sanction.id.toLowerCase().startsWith(normalizedReference));
+  throwIfError(error); const matches = (data ?? []).filter((sanction: Sanction) => sanction.id.toLowerCase().startsWith(normalizedReference));
   if (matches.length > 1) throw new Error("Reference is ambiguous. Use the full warning ID."); return matches[0] ?? null;
 }
 export async function getMemberHistory(guildId: string, memberId: string): Promise<Sanction[]> {
