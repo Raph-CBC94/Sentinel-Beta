@@ -2,60 +2,24 @@
 
 Bot Discord de modération avec avertissements, mises en sourdine, historique persistant et logs détaillés dans Supabase.
 
-## Run & Operate
+## Architecture
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- `pnpm --filter @workspace/api-server run typecheck` — verify the bot and API types
-- `pnpm --filter @workspace/api-server run build` — build the long-running Discord worker/API service
-- Apply `supabase/schema.sql` once in the Supabase SQL editor before starting the bot.
-- Required env: `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
-- Permission env: `WARN_ROLE_IDS` and `TIMEOUT_ROLE_IDS` (comma-separated role IDs), plus `REMOVE_WARNING_USER_IDS` (comma-separated user IDs)
-- Optional env: `LOG_CHANNEL_ID`
+- Le site est un build Vite statique déployé sur Vercel.
+- Discord utilise la Function HTTP /api/discord/interactions ; aucun Gateway permanent n'est démarré en production.
+- Chaque interaction est vérifiée avec la clé publique Discord, puis traitée avec l'API REST Discord et Supabase côté serveur.
+- Le menu /retirer-avertissement est stateless : le clic sur le select menu arrive comme une nouvelle interaction HTTP.
+- Les secrets ne doivent jamais être préfixés par VITE_ ni envoyés au navigateur.
 
-## Stack
+## Commandes locales
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- pnpm --filter @workspace/api-server run dev — lancer l'API de santé locale
+- pnpm run typecheck — vérifier les types
+- pnpm run build — construire les packages et le site
+- pnpm run discord:register — enregistrer les commandes guild Discord avec les variables serveur
+- Appliquer supabase/schema.sql une fois dans l'éditeur SQL Supabase.
 
-## Where things live
+## Variables nécessaires
 
-- `artifacts/api-server/src/discord/` — Discord client, slash commands, permission checks, and Supabase persistence
-- `supabase/schema.sql` — source of truth for sanction and audit-event tables
-- `.env.example` — required configuration names without secret values
+DISCORD_TOKEN, DISCORD_PUBLIC_KEY, DISCORD_CLIENT_ID, DISCORD_GUILD_ID, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, WARN_ROLE_IDS, TIMEOUT_ROLE_IDS, REMOVE_WARNING_USER_IDS et éventuellement LOG_CHANNEL_ID.
 
-## Architecture decisions
-
-- The Discord gateway runs in the existing API service, which also keeps a health endpoint for worker hosting.
-- The Sentinel website is a static Vite site for Vercel; the Discord gateway stays server-side and must never receive the bot token in browser code.
-- Permission checks use explicit role-ID allowlists per action; Discord administrator permissions do not bypass these lists.
-- Sanctions are written to Supabase before public confirmation; failed timeout applications remain auditable with `failed` status.
-- Discord messages are best-effort notifications: a blocked DM never prevents the sanction or database record.
-
-## Product
-
-- `/avertir` ajoute un avertissement, envoie un message public, tente un message privé et écrit un journal détaillé.
-- `/sourdine` et `/retirer-sourdine` gèrent les mises en sourdine avec une durée limitée.
-- `/historique` affiche l'historique complet des avertissements et mises en sourdine, tandis que `/retirer-avertissement` permet de choisir directement un avertissement actif dans un menu.
-
-## User preferences
-
-_Populate as you build — explicit user instructions worth remembering across sessions._
-
-## Gotchas
-
-- Discord slash commands are registered for `DISCORD_GUILD_ID` on every bot start.
-- The bot needs the `Moderate Members`, `Send Messages`, `Embed Links`, and `View Channel` permissions.
-- The bot application must be invited to `DISCORD_GUILD_ID` with both `bot` and `applications.commands` scopes before slash-command registration can succeed.
-- Apply `supabase/schema.sql` before starting the service or every command will fail at persistence.
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+Le token Discord, la clé publique et la clé service Supabase vont uniquement dans les variables d'environnement Vercel. Ne jamais les committer.
