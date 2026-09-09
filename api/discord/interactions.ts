@@ -113,7 +113,7 @@ function targetOf(interaction: DiscordInteraction): TargetMember | null {
 }
 
 function parseDuration(value: string): number | null {
-  const match = /^(\\d{1,5})\\s*(s|m|h|d)$/i.exec(value.trim());
+  const match = /^(\d{1,5})\s*(s|m|h|d)$/i.exec(value.trim());
   if (!match) return null;
   const amount = Number(match[1]);
   const unit = match[2].toLowerCase();
