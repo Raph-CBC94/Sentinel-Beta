@@ -16,8 +16,13 @@ type DiscordMember = { user?: DiscordUser; roles?: string[] };
 type InteractionOption = { name: string; value?: string | number | boolean };
 type DiscordInteraction = {
   id: string; application_id: string; token: string; type: number; guild_id?: string; user?: DiscordUser; member?: DiscordMember;
-  data?: { name?: string; options?: InteractionOption[]; custom_id?: string; values?: string[] };
-  resolved?: { users?: Record<string, DiscordUser>; members?: Record<string, DiscordMember> };
+  data?: {
+    name?: string;
+    options?: InteractionOption[];
+    custom_id?: string;
+    values?: string[];
+    resolved?: { users?: Record<string, DiscordUser>; members?: Record<string, DiscordMember> };
+  };
 };
 type ResponsePayload = { content?: string; embeds?: unknown[]; components?: unknown[] };
 type TargetMember = { id: string; tag: string };
@@ -90,10 +95,11 @@ function option(interaction: DiscordInteraction, name: string): string | null { 
 function targetOf(interaction: DiscordInteraction): TargetMember | null {
   const id = option(interaction, "membre");
   if (!id) return null;
-  const user = interaction.resolved?.users?.[id];
-  const member = interaction.resolved?.members?.[id];
-  if (!user || !member) return null;
-  return { id, tag: user.username || user.global_name || id };
+  const user = interaction.data?.resolved?.users?.[id];
+  const member = interaction.data?.resolved?.members?.[id];
+  const resolvedUser = user ?? member?.user;
+  if (!resolvedUser) return null;
+  return { id, tag: resolvedUser.username || resolvedUser.global_name || id };
 }
 
 function parseDuration(value: string): number | null {
