@@ -34,6 +34,7 @@ Bot Discord de modération avec avertissements, mises en sourdine, historique pe
 ## Architecture decisions
 
 - The Discord gateway runs in the existing API service, which also keeps a health endpoint for worker hosting.
+- The Sentinel website is a static Vite site for Vercel; the Discord gateway stays server-side and must never receive the bot token in browser code.
 - Permission checks use explicit role-ID allowlists per action; Discord administrator permissions do not bypass these lists.
 - Sanctions are written to Supabase before public confirmation; failed timeout applications remain auditable with `failed` status.
 - Discord messages are best-effort notifications: a blocked DM never prevents the sanction or database record.

@@ -1,2 +1,3 @@
 - [Conversation transfer files](conversation-transfer-files.md) — after a project handoff, imported files may remain under `.local/conversation-workspace/files` until restored into the project root.
 - [Discord component selection](discord-component-selection.md) — collect ephemeral select-menu choices from the fetched reply message in discord.js.
+- [Vercel and Discord hosting](vercel-discord-hosting.md) — keep the static site on Vercel and the persistent Discord gateway server-side.

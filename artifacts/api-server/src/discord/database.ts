@@ -70,14 +70,10 @@ export async function updateSanction(
   throwIfError(error);
 }
 
-export async function removeWarning(id: string, moderatorId: string): Promise<Sanction> {
+export async function removeWarning(id: string, _moderatorId: string): Promise<Sanction> {
   const { data, error } = await getDatabase()
     .from("sanctions")
-    .update({
-      status: "removed",
-      removed_at: new Date().toISOString(),
-      removed_by: moderatorId,
-    })
+    .delete()
     .eq("id", id)
     .eq("type", "warning")
     .eq("status", "applied")
@@ -90,6 +86,25 @@ export async function removeWarning(id: string, moderatorId: string): Promise<Sa
   }
 
   return data;
+}
+
+export async function removeActiveTimeouts(
+  guildId: string,
+  memberId: string,
+): Promise<Sanction[]> {
+  const { data, error } = await getDatabase()
+    .from("sanctions")
+    .delete()
+    .eq("guild_id", guildId)
+    .eq("member_id", memberId)
+    .eq("type", "timeout")
+    .eq("status", "applied")
+    .gt("expires_at", new Date().toISOString())
+    .select("*")
+    .returns<Sanction[]>();
+
+  throwIfError(error);
+  return data ?? [];
 }
 
 export async function findWarningByReference(
@@ -129,6 +144,7 @@ export async function getMemberHistory(
     .eq("guild_id", guildId)
     .eq("member_id", memberId)
     .neq("status", "failed")
+    .neq("status", "removed")
     .order("created_at", { ascending: false })
     .returns<Sanction[]>();
 

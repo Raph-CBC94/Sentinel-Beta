@@ -17,6 +17,7 @@ import {
   createSanction,
   getMemberHistory,
   recordEvent,
+  removeActiveTimeouts,
   removeWarning,
   updateSanction,
   type Sanction,
@@ -398,6 +399,7 @@ async function handleUntimeout(
       action: "untimeout",
       reason,
     });
+    await removeActiveTimeouts(interaction.guildId!, member.id);
     await interaction.reply({ content: `La sourdine de <@${member.id}> a été retirée.` });
     await sendLog(
       interaction,
@@ -448,10 +450,9 @@ async function handleHistory(
   const warnings = history.filter((sanction) => sanction.type === "warning").length;
   const timeouts = history.filter((sanction) => sanction.type === "timeout").length;
   const lines = history.map((sanction) => {
-    const removed = sanction.status === "removed" ? " — retiré" : "";
     const duration =
       sanction.type === "timeout" ? ` — ${formatDuration(sanction.duration_seconds)}` : "";
-    return `${referenceFor(sanction)} **${sanction.type === "warning" ? "Avertissement" : "Sourdine"}**${duration}${removed}\n${sanction.reason}\nPar <@${sanction.moderator_id}> · ${formatDate(sanction.created_at)}`;
+    return `${referenceFor(sanction)} **${sanction.type === "warning" ? "Avertissement" : "Sourdine"}**${duration}\n${sanction.reason}\nPar <@${sanction.moderator_id}> · ${formatDate(sanction.created_at)}`;
   });
   const intro = `**Historique de ${member.user.tag}**\nAvertissements : **${warnings}** · Sourdines : **${timeouts}**\n\n`;
   const chunks: string[] = [];
@@ -488,13 +489,14 @@ async function handleRemoveWarning(
     return;
   }
 
+  await interaction.deferReply({ ephemeral: true });
+
   const activeWarnings = (await getMemberHistory(interaction.guildId!, member.id)).filter(
     (sanction) => sanction.type === "warning" && sanction.status === "applied",
   );
   if (activeWarnings.length === 0) {
-    await interaction.reply({
+    await interaction.editReply({
       content: `<@${member.id}> ne possède aucun avertissement actif à retirer.`,
-      ephemeral: true,
     });
     return;
   }
@@ -514,13 +516,12 @@ async function handleRemoveWarning(
     rows.push(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu));
   }
 
-  await interaction.reply({
+  await interaction.editReply({
     content:
       visibleWarnings.length < activeWarnings.length
         ? "Choisissez l'avertissement à retirer parmi les 125 plus récents :"
         : "Choisissez l'avertissement à retirer :",
     components: rows,
-    ephemeral: true,
   });
 
   const reply = await interaction.fetchReply();
