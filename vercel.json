@@ -2,5 +2,6 @@
   "framework": "vite",
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm --filter @workspace/sentinel-website run build",
-  "outputDirectory": "artifacts/sentinel-website/dist/public"
+  "outputDirectory": "artifacts/sentinel-website/dist/public",
+  "functions": { "api/discord/interactions.ts": { "maxDuration": 60 } }
 }
