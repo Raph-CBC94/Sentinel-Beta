@@ -8,8 +8,8 @@ import {
   removeWarning,
   updateSanction,
   type Sanction,
-} from "../../artifacts/api-server/src/discord/database";
-import { getBotConfig, type BotConfig } from "../../artifacts/api-server/src/discord/config";
+} from "../../artifacts/api-server/src/discord/database.js";
+import { getBotConfig, type BotConfig } from "../../artifacts/api-server/src/discord/config.js";
 
 type DiscordUser = { id: string; username?: string; global_name?: string | null; discriminator?: string };
 type DiscordMember = { user?: DiscordUser; roles?: string[] };
@@ -206,9 +206,9 @@ async function handleHistory(interaction: DiscordInteraction, config: BotConfig)
   if (!(await requireAccess(interaction, hasAnyModeratorAccess(interaction, config), "consulter les historiques", config))) return;
   const history = await getMemberHistory(interaction.guild_id!, target.id);
   if (history.length === 0) { await editOriginal(interaction, { content: "<@" + target.id + "> ne possède aucune sanction enregistrée." }, config); return; }
-  const warnings = history.filter((sanction) => sanction.type === "warning").length; const timeouts = history.filter((sanction) => sanction.type === "timeout").length;
+  const warnings = history.filter((sanction: Sanction) => sanction.type === "warning").length; const timeouts = history.filter((sanction: Sanction) => sanction.type === "timeout").length;
   const intro = "**Historique de " + target.tag + "**\\nAvertissements : **" + warnings + "** · Sourdines : **" + timeouts + "**\\n\\n";
-  const lines = history.map((sanction) => { const duration = sanction.type === "timeout" ? " — " + formatDuration(sanction.duration_seconds) : ""; return referenceFor(sanction) + " **" + (sanction.type === "warning" ? "Avertissement" : "Sourdine") + "**" + duration + "\\n" + sanction.reason + "\\nPar <@" + sanction.moderator_id + "> · " + formatDate(sanction.created_at); });
+  const lines = history.map((sanction: Sanction) => { const duration = sanction.type === "timeout" ? " — " + formatDuration(sanction.duration_seconds) : ""; return referenceFor(sanction) + " **" + (sanction.type === "warning" ? "Avertissement" : "Sourdine") + "**" + duration + "\\n" + sanction.reason + "\\nPar <@" + sanction.moderator_id + "> · " + formatDate(sanction.created_at); });
   const chunks: string[] = []; let current = intro;
   for (const line of lines) { if (current.length + line.length + 2 > 3900) { chunks.push(current); current = ""; } current += line + "\\n\\n"; }
   if (current) chunks.push(current);
@@ -220,11 +220,11 @@ async function handleRemoveWarningCommand(interaction: DiscordInteraction, confi
   const target = targetOf(interaction);
   if (!target) { await editOriginal(interaction, { content: "Ce membre n'est plus présent sur le serveur." }, config); return; }
   if (!(await requireAccess(interaction, hasUser(interaction, config.removeWarningUserIds), "retirer un avertissement", config))) return;
-  const activeWarnings = (await getMemberHistory(interaction.guild_id!, target.id)).filter((sanction) => sanction.type === "warning" && sanction.status === "applied");
+  const activeWarnings = (await getMemberHistory(interaction.guild_id!, target.id)).filter((sanction: Sanction) => sanction.type === "warning" && sanction.status === "applied");
   if (activeWarnings.length === 0) { await editOriginal(interaction, { content: "<@" + target.id + "> ne possède aucun avertissement actif à retirer." }, config); return; }
   const visibleWarnings = activeWarnings.slice(0, 125); const rows: unknown[] = [];
   for (let index = 0; index < visibleWarnings.length; index += 25) {
-    const options = visibleWarnings.slice(index, index + 25).map((warning) => ({ label: "Avertissement " + referenceFor(warning), description: formatSelectionDescription(warning), value: warning.id }));
+    const options = visibleWarnings.slice(index, index + 25).map((warning: Sanction) => ({ label: "Avertissement " + referenceFor(warning), description: formatSelectionDescription(warning), value: warning.id }));
     rows.push({ type: 1, components: [{ type: 3, custom_id: "retirer-avertissement:" + target.id, placeholder: "Choisissez un avertissement à retirer", options }] });
   }
   await editOriginal(interaction, { content: visibleWarnings.length < activeWarnings.length ? "Choisissez l'avertissement à retirer parmi les 125 plus récents :" : "Choisissez l'avertissement à retirer :", components: rows }, config);
@@ -234,7 +234,7 @@ async function handleRemoveWarningSelection(interaction: DiscordInteraction, con
   const customId = interaction.data?.custom_id || ""; const targetId = customId.split(":")[1]; const warningId = interaction.data?.values?.[0]; const actor = actorOf(interaction);
   if (!targetId || !warningId || !actor) { await editOriginal(interaction, { content: "Cette sélection n'est plus disponible.", components: [] }, config); return; }
   if (!(await requireAccess(interaction, hasUser(interaction, config.removeWarningUserIds), "retirer un avertissement", config))) return;
-  const warning = (await getMemberHistory(interaction.guild_id!, targetId)).find((sanction) => sanction.id === warningId && sanction.type === "warning" && sanction.status === "applied");
+  const warning = (await getMemberHistory(interaction.guild_id!, targetId)).find((sanction: Sanction) => sanction.id === warningId && sanction.type === "warning" && sanction.status === "applied");
   if (!warning) { await editOriginal(interaction, { content: "Cet avertissement n'est plus disponible. Relancez la commande.", components: [] }, config); return; }
   const removed = await removeWarning(warning.id, actor.id);
   await editOriginal(interaction, { content: "L'avertissement " + referenceFor(removed) + " de <@" + targetId + "> a été retiré.", components: [] }, config);
