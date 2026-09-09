@@ -1,31 +1,15 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { startDiscordBot } from "./discord/bot";
 
 const rawPort = process.env["PORT"];
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
+if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
 const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
+if (Number.isNaN(port) || port <= 0) throw new Error("Invalid PORT value: " + rawPort);
 
 app.listen(port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
   }
-
-  logger.info({ port }, "Server listening");
-
-  void startDiscordBot().catch((error: unknown) => {
-    logger.error({ err: error }, "Discord bot failed to start");
-    process.exitCode = 1;
-  });
+  logger.info({ port }, "Health API listening; Discord runs through Vercel HTTP interactions");
 });
