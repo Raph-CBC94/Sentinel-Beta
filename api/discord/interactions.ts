@@ -57,7 +57,7 @@ function verifyDiscordSignature(rawBody: string, req: IncomingMessage): boolean 
 
 async function discordRequest<T>(config: BotConfig, path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  headers.set("authorization", "Bot " + config.token);
+  if (!path.startsWith("/interactions/") && !path.startsWith("/webhooks/")) headers.set("authorization", "Bot " + config.token);
   if (init.body !== undefined) headers.set("content-type", "application/json");
   const response = await fetch(DISCORD_API + path, { ...init, headers });
   const text = await response.text();
