@@ -71,6 +71,16 @@ async function discordRequest<T>(config: BotConfig, path: string, init: RequestI
   return JSON.parse(text) as T;
 }
 
+async function guildNameOf(interaction: DiscordInteraction, config: BotConfig): Promise<string> {
+  if (!interaction.guild_id) return "ce serveur Discord";
+  try {
+    const guild = await discordRequest<{ name?: string }>(config, "/guilds/" + interaction.guild_id);
+    return guild.name?.trim() || "ce serveur Discord";
+  } catch {
+    return "ce serveur Discord";
+  }
+}
+
 async function acknowledge(interaction: DiscordInteraction, type: 5 | 6, ephemeral: boolean, config: BotConfig): Promise<void> {
   const body: { type: number; data?: { flags: number } } = { type };
   if (type === 5 && ephemeral) body.data = { flags: EPHEMERAL };
@@ -163,7 +173,8 @@ async function handleWarn(interaction: DiscordInteraction, config: BotConfig): P
   if (!actor || !target) { await editOriginal(interaction, { content: "Ce membre n'est plus présent sur le serveur." }, config); return; }
   if (!(await requireAccess(interaction, hasRole(interaction, config.roles.warn), "attribuer un avertissement", config))) return;
   const sanction = await createSanction({ guild_id: interaction.guild_id!, member_id: target.id, member_tag: target.tag, type: "warning", reason, moderator_id: actor.id, moderator_tag: actor.username || actor.id, duration_seconds: null, expires_at: null, status: "applied" });
-  const dm = await notifyMember(config, target.id, "Vous avez reçu un avertissement sur ce serveur Discord.\nRaison : " + reason + "\nRéférence : " + referenceFor(sanction));
+  const guildName = await guildNameOf(interaction, config);
+  const dm = await notifyMember(config, target.id, "Vous avez reçu un avertissement sur le serveur **" + guildName + "**.\nRaison : " + reason + "\nRéférence : " + referenceFor(sanction));
   await updateSanction(sanction.id, { dm_sent: dm.sent, dm_error: dm.error ?? null });
   await editOriginal(interaction, { embeds: [sanctionEmbed("Avertissement ajouté", 0xf59e0b, sanction)] }, config);
   await sendLog(config, sanctionEmbed("Avertissement enregistré", 0xf59e0b, sanction, [{ name: "Message privé", value: dm.sent ? "Envoyé" : "Échec : " + (dm.error || "inconnu") }]));
@@ -183,7 +194,8 @@ async function handleTimeout(interaction: DiscordInteraction, config: BotConfig)
     await updateSanction(sanction.id, { status: "failed", dm_error: error instanceof Error ? error.message.slice(0, 500) : "La sourdine a échoué" });
     await editOriginal(interaction, { content: "Le timeout Discord a échoué. Vérifiez ma permission Modérer les membres." }, config); return;
   }
-  const dm = await notifyMember(config, target.id, "Vous avez été mis en sourdine sur ce serveur Discord.\nDurée : " + formatDuration(durationSeconds) + "\nFin : " + formatDate(expiresAt) + "\nRaison : " + reason + "\nRéférence : " + referenceFor(sanction));
+  const guildName = await guildNameOf(interaction, config);
+  const dm = await notifyMember(config, target.id, "Vous avez été mis en sourdine sur le serveur **" + guildName + "**.\nDurée : " + formatDuration(durationSeconds) + "\nFin : " + formatDate(expiresAt) + "\nRaison : " + reason + "\nRéférence : " + referenceFor(sanction));
   await updateSanction(sanction.id, { dm_sent: dm.sent, dm_error: dm.error ?? null });
   const appliedSanction = { ...sanction, status: "applied" as const };
   await editOriginal(interaction, { embeds: [sanctionEmbed("Sourdine appliquée", 0xef4444, appliedSanction)] }, config);
