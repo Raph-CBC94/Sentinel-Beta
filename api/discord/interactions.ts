@@ -139,6 +139,7 @@ function sanctionEmbed(title: string, color: number, sanction: Sanction, extraFi
     { name: "Membre", value: "<@" + sanction.member_id + ">", inline: true },
     { name: "Modérateur", value: "<@" + sanction.moderator_id + ">", inline: true },
     { name: "Référence", value: referenceFor(sanction), inline: true },
+    ...(sanction.type === "warning" ? [{ name: "Niveau", value: sanction.warning_level + "/5", inline: true }] : []),
     { name: "Raison", value: sanction.reason.slice(0, 1024) },
     { name: "Date", value: formatDate(sanction.created_at), inline: true },
     ...(sanction.type === "timeout" ? [{ name: "Durée", value: formatDuration(sanction.duration_seconds), inline: true }, { name: "Fin", value: sanction.expires_at ? formatDate(sanction.expires_at) : "—", inline: true }] : []),
@@ -169,12 +170,13 @@ async function requireAccess(interaction: DiscordInteraction, allowed: boolean, 
 }
 
 async function handleWarn(interaction: DiscordInteraction, config: BotConfig): Promise<void> {
-  const actor = actorOf(interaction); const target = targetOf(interaction); const reason = option(interaction, "raison")?.trim() || "Aucune raison précisée";
+  const actor = actorOf(interaction); const target = targetOf(interaction); const reason = option(interaction, "raison")?.trim() || "Aucune raison précisée"; const levelInput = option(interaction, "niveau"); const warningLevel = Number(levelInput);
   if (!actor || !target) { await editOriginal(interaction, { content: "Ce membre n'est plus présent sur le serveur." }, config); return; }
   if (!(await requireAccess(interaction, hasRole(interaction, config.roles.warn), "attribuer un avertissement", config))) return;
-  const sanction = await createSanction({ guild_id: interaction.guild_id!, member_id: target.id, member_tag: target.tag, type: "warning", reason, moderator_id: actor.id, moderator_tag: actor.username || actor.id, duration_seconds: null, expires_at: null, status: "applied" });
+  if (!Number.isInteger(warningLevel) || warningLevel < 1 || warningLevel > 5) { await editOriginal(interaction, { content: "Niveau d'avertissement invalide. Utilisez un nombre entre 1 et 5." }, config); return; }
+  const sanction = await createSanction({ guild_id: interaction.guild_id!, member_id: target.id, member_tag: target.tag, type: "warning", warning_level: warningLevel, reason, moderator_id: actor.id, moderator_tag: actor.username || actor.id, duration_seconds: null, expires_at: null, status: "applied" });
   const guildName = await guildNameOf(interaction, config);
-  const dm = await notifyMember(config, target.id, "Vous avez reçu un avertissement sur le serveur **" + guildName + "**.\nRaison : " + reason + "\nRéférence : " + referenceFor(sanction));
+  const dm = await notifyMember(config, target.id, "Vous avez reçu un avertissement de niveau **" + warningLevel + "/5** sur le serveur **" + guildName + "**.\nRaison : " + reason + "\nRéférence : " + referenceFor(sanction));
   await updateSanction(sanction.id, { dm_sent: dm.sent, dm_error: dm.error ?? null });
   await editOriginal(interaction, { embeds: [sanctionEmbed("Avertissement ajouté", 0xf59e0b, sanction)] }, config);
   await sendLog(config, sanctionEmbed("Avertissement enregistré", 0xf59e0b, sanction, [{ name: "Message privé", value: dm.sent ? "Envoyé" : "Échec : " + (dm.error || "inconnu") }]));
@@ -186,7 +188,7 @@ async function handleTimeout(interaction: DiscordInteraction, config: BotConfig)
   if (!(await requireAccess(interaction, hasRole(interaction, config.roles.timeout), "mettre un membre en sourdine", config))) return;
   if (!durationSeconds) { await editOriginal(interaction, { content: "Durée de sourdine invalide. Utilisez une valeur comme 30m, 2h ou 1d (maximum 28 jours)." }, config); return; }
   const expiresAt = new Date(Date.now() + durationSeconds * 1000).toISOString();
-  const sanction = await createSanction({ guild_id: interaction.guild_id!, member_id: target.id, member_tag: target.tag, type: "timeout", reason, moderator_id: actor.id, moderator_tag: actor.username || actor.id, duration_seconds: durationSeconds, expires_at: expiresAt, status: "pending" });
+  const sanction = await createSanction({ guild_id: interaction.guild_id!, member_id: target.id, member_tag: target.tag, type: "timeout", warning_level: 1, reason, moderator_id: actor.id, moderator_tag: actor.username || actor.id, duration_seconds: durationSeconds, expires_at: expiresAt, status: "pending" });
   try {
     await discordRequest(config, "/guilds/" + interaction.guild_id + "/members/" + target.id, { method: "PATCH", body: JSON.stringify({ communication_disabled_until: expiresAt }) });
     await updateSanction(sanction.id, { status: "applied" });
@@ -226,7 +228,7 @@ async function handleHistory(interaction: DiscordInteraction, config: BotConfig)
   if (history.length === 0) { await editOriginal(interaction, { content: "<@" + target.id + "> ne possède aucune sanction enregistrée." }, config); return; }
   const warnings = history.filter((sanction: Sanction) => sanction.type === "warning").length; const timeouts = history.filter((sanction: Sanction) => sanction.type === "timeout").length;
   const intro = "**Historique de " + target.tag + "**\nAvertissements : **" + warnings + "** · Sourdines : **" + timeouts + "**\n\n";
-  const lines = history.map((sanction: Sanction) => { const duration = sanction.type === "timeout" ? " — " + formatDuration(sanction.duration_seconds) : ""; return referenceFor(sanction) + " **" + (sanction.type === "warning" ? "Avertissement" : "Sourdine") + "**" + duration + "\n" + sanction.reason + "\nPar <@" + sanction.moderator_id + "> · " + formatDate(sanction.created_at); });
+  const lines = history.map((sanction: Sanction) => { const duration = sanction.type === "timeout" ? " — " + formatDuration(sanction.duration_seconds) : ""; const level = sanction.type === "warning" ? " — Niveau " + sanction.warning_level + "/5" : ""; return referenceFor(sanction) + " **" + (sanction.type === "warning" ? "Avertissement" : "Sourdine") + "**" + level + duration + "\n" + sanction.reason + "\nPar <@" + sanction.moderator_id + "> · " + formatDate(sanction.created_at); });
   const chunks: string[] = []; let current = intro;
   for (const line of lines) { if (current.length + line.length + 2 > 3900) { chunks.push(current); current = ""; } current += line + "\n\n"; }
   if (current) chunks.push(current);
