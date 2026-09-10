@@ -1,6 +1,7 @@
 const commandDefinitions = [
   { name: "avertir", description: "Attribuer un avertissement à un membre", options: [
     { type: 6, name: "membre", description: "Membre à avertir", required: true },
+    { type: 4, name: "niveau", description: "Niveau de l'avertissement (1 à 5)", min_value: 1, max_value: 5, required: true },
     { type: 3, name: "raison", description: "Raison de l'avertissement", max_length: 500, required: true },
   ] },
   { name: "sourdine", description: "Mettre un membre en sourdine", options: [
