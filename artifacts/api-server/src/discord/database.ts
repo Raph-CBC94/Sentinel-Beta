@@ -4,7 +4,7 @@ import { getBotConfig } from "./config.js";
 export type SanctionType = "warning" | "timeout";
 export type SanctionStatus = "pending" | "applied" | "failed" | "removed";
 export type Sanction = {
-  id: string; guild_id: string; member_id: string; member_tag: string; type: SanctionType; reason: string; moderator_id: string; moderator_tag: string; created_at: string;
+  id: string; guild_id: string; member_id: string; member_tag: string; type: SanctionType; warning_level: number; reason: string; moderator_id: string; moderator_tag: string; created_at: string;
   duration_seconds: number | null; expires_at: string | null; status: SanctionStatus; dm_sent: boolean | null; dm_error: string | null; removed_at: string | null; removed_by: string | null;
 };
 type NewSanction = Omit<Sanction, "id" | "created_at" | "dm_sent" | "dm_error" | "removed_at" | "removed_by">;
