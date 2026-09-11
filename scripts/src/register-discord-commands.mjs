@@ -18,6 +18,7 @@ const commandDefinitions = [
   { name: "say", description: "Faire parler le bot dans ce salon", options: [
     { type: 3, name: "message", description: "Message à envoyer", max_length: 2000, required: true },
   ] },
+  { name: "avis-ia", description: "Analyser les 50 derniers messages pour aider la modération" },
 ];
 
 const required = ["DISCORD_TOKEN", "DISCORD_CLIENT_ID", "DISCORD_GUILD_ID"];
