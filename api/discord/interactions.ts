@@ -24,7 +24,7 @@ type DiscordInteraction = {
     resolved?: { users?: Record<string, DiscordUser>; members?: Record<string, DiscordMember> };
   };
 };
-type ResponsePayload = { content?: string; embeds?: unknown[]; components?: unknown[] };
+type ResponsePayload = { content?: string; embeds?: unknown[]; components?: unknown[]; allowed_mentions?: { parse: string[] } };
 type TargetMember = { id: string; tag: string };
 
 const MAX_TIMEOUT_SECONDS = 28 * 24 * 60 * 60;
@@ -236,6 +236,14 @@ async function handleHistory(interaction: DiscordInteraction, config: BotConfig)
   for (const chunk of chunks.slice(1)) await followUp(interaction, { content: chunk }, config);
 }
 
+async function handleSay(interaction: DiscordInteraction, config: BotConfig): Promise<void> {
+  const message = option(interaction, "message")?.trim() || "";
+  if (!(await requireAccess(interaction, hasAnyModeratorAccess(interaction, config), "faire parler le bot", config))) return;
+  if (!message) { await editOriginal(interaction, { content: "Le message ne peut pas être vide." }, config); return; }
+  if (message.length > 2000) { await editOriginal(interaction, { content: "Le message est trop long. La limite Discord est de 2000 caractères." }, config); return; }
+  await editOriginal(interaction, { content: message, components: [], allowed_mentions: { parse: [] } }, config);
+}
+
 async function handleRemoveWarningCommand(interaction: DiscordInteraction, config: BotConfig): Promise<void> {
   const target = targetOf(interaction);
   if (!target) { await editOriginal(interaction, { content: "Ce membre n'est plus présent sur le serveur." }, config); return; }
@@ -267,6 +275,7 @@ function commandNeedsEphemeral(interaction: DiscordInteraction, config: BotConfi
   if (name === "avertir") return !hasRole(interaction, config.roles.warn);
   if (name === "sourdine" || name === "retirer-sourdine") return !hasRole(interaction, config.roles.timeout);
   if (name === "historique") return !hasAnyModeratorAccess(interaction, config);
+  if (name === "say") return !hasAnyModeratorAccess(interaction, config);
   return true;
 }
 
@@ -279,6 +288,7 @@ async function processInteraction(interaction: DiscordInteraction, config: BotCo
     case "retirer-sourdine": await handleUntimeout(interaction, config); break;
     case "historique": await handleHistory(interaction, config); break;
     case "retirer-avertissement": await handleRemoveWarningCommand(interaction, config); break;
+    case "say": await handleSay(interaction, config); break;
     default: await editOriginal(interaction, { content: "Commande inconnue." }, config);
   }
 }
@@ -299,7 +309,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   try { await acknowledge(interaction, interaction.type === 3 ? 6 : 5, ephemeral, botConfig); }
   catch (error) { console.error("Could not acknowledge Discord interaction", error); json(res, 500, { error: "Could not acknowledge interaction" }); return; }
   try { await processInteraction(interaction, botConfig); }
-  catch (error) { console.error("Discord interaction failed", error); await editOriginal(interaction, { content: "Une erreur interne est survenue. La sanction n'a pas pu être finalisée.", components: [] }, botConfig).catch(() => undefined); }
+  catch (error) { console.error("Discord interaction failed", error); await editOriginal(interaction, { content: "Une erreur interne est survenue. La commande n'a pas pu être finalisée.", components: [] }, botConfig).catch(() => undefined); }
   res.statusCode = 204;
   res.end();
 }
