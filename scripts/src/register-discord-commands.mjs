@@ -15,6 +15,9 @@ const commandDefinitions = [
   ] },
   { name: "historique", description: "Consulter l'historique des sanctions", options: [{ type: 6, name: "membre", description: "Membre à consulter", required: true }] },
   { name: "retirer-avertissement", description: "Choisir l'avertissement à retirer", options: [{ type: 6, name: "membre", description: "Membre concerné", required: true }] },
+  { name: "say", description: "Faire parler le bot dans ce salon", options: [
+    { type: 3, name: "message", description: "Message à envoyer", max_length: 2000, required: true },
+  ] },
 ];
 
 const required = ["DISCORD_TOKEN", "DISCORD_CLIENT_ID", "DISCORD_GUILD_ID"];
