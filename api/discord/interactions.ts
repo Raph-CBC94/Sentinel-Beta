@@ -165,9 +165,9 @@ async function requestAiReview(messages: DiscordChannelMessage[], apiKey: string
     method: "POST",
     headers: { authorization: "Bearer " + apiKey, "content-type": "application/json" },
     body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-120b",
       temperature: 0.1,
-      max_tokens: 1000,
+      max_tokens: 1800,
       messages: [
         {
           role: "system",
