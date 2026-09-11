@@ -241,7 +241,7 @@ async function handleSay(interaction: DiscordInteraction, config: BotConfig): Pr
   if (!(await requireAccess(interaction, hasAnyModeratorAccess(interaction, config), "faire parler le bot", config))) return;
   if (!message) { await editOriginal(interaction, { content: "Le message ne peut pas être vide." }, config); return; }
   if (message.length > 2000) { await editOriginal(interaction, { content: "Le message est trop long. La limite Discord est de 2000 caractères." }, config); return; }
-  await editOriginal(interaction, { content: message, components: [], allowed_mentions: { parse: [] } }, config);
+  await editOriginal(interaction, { content: message, components: [], allowed_mentions: { parse: ["users", "roles", "everyone"] } }, config);
 }
 
 async function handleRemoveWarningCommand(interaction: DiscordInteraction, config: BotConfig): Promise<void> {
