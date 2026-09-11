@@ -241,7 +241,8 @@ async function handleSay(interaction: DiscordInteraction, config: BotConfig): Pr
   if (!(await requireAccess(interaction, hasAnyModeratorAccess(interaction, config), "faire parler le bot", config))) return;
   if (!message) { await editOriginal(interaction, { content: "Le message ne peut pas être vide." }, config); return; }
   if (message.length > 2000) { await editOriginal(interaction, { content: "Le message est trop long. La limite Discord est de 2000 caractères." }, config); return; }
-  await editOriginal(interaction, { content: message, components: [], allowed_mentions: { parse: ["users", "roles", "everyone"] } }, config);
+  await editOriginal(interaction, { content: "Le message va être envoyé…", components: [] }, config);
+  await followUp(interaction, { content: message, allowed_mentions: { parse: ["users", "roles", "everyone"] } }, config);
 }
 
 async function handleRemoveWarningCommand(interaction: DiscordInteraction, config: BotConfig): Promise<void> {
@@ -275,7 +276,7 @@ function commandNeedsEphemeral(interaction: DiscordInteraction, config: BotConfi
   if (name === "avertir") return !hasRole(interaction, config.roles.warn);
   if (name === "sourdine" || name === "retirer-sourdine") return !hasRole(interaction, config.roles.timeout);
   if (name === "historique") return !hasAnyModeratorAccess(interaction, config);
-  if (name === "say") return !hasAnyModeratorAccess(interaction, config);
+  if (name === "say") return true;
   return true;
 }
 
