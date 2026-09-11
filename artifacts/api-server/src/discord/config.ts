@@ -11,6 +11,7 @@ export type BotConfig = {
   guildId: string;
   supabaseUrl: string;
   supabaseServiceRoleKey: string;
+  groqApiKey?: string;
   logChannelId?: string;
   roles: {
     warn: string[];
@@ -39,6 +40,7 @@ export function getBotConfig(): BotConfig {
     guildId: process.env.DISCORD_GUILD_ID!,
     supabaseUrl: process.env.SUPABASE_URL!,
     supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    groqApiKey: process.env.GROQ_API_KEY,
     logChannelId: process.env.LOG_CHANNEL_ID,
     roles: {
       warn: parseRoleIds(process.env.WARN_ROLE_IDS),
