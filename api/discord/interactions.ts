@@ -91,10 +91,6 @@ async function editOriginal(interaction: DiscordInteraction, payload: ResponsePa
   await discordRequest(config, "/webhooks/" + interaction.application_id + "/" + interaction.token + "/messages/@original", { method: "PATCH", body: JSON.stringify(payload) });
 }
 
-async function deleteOriginal(interaction: DiscordInteraction, config: BotConfig): Promise<void> {
-  await discordRequest(config, "/webhooks/" + interaction.application_id + "/" + interaction.token + "/messages/@original", { method: "DELETE" });
-}
-
 async function followUp(interaction: DiscordInteraction, payload: ResponsePayload, config: BotConfig): Promise<void> {
   await discordRequest(config, "/webhooks/" + interaction.application_id + "/" + interaction.token, { method: "POST", body: JSON.stringify(payload) });
 }
@@ -245,9 +241,8 @@ async function handleSay(interaction: DiscordInteraction, config: BotConfig): Pr
   if (!(await requireAccess(interaction, hasAnyModeratorAccess(interaction, config), "faire parler le bot", config))) return;
   if (!message) { await editOriginal(interaction, { content: "Le message ne peut pas être vide." }, config); return; }
   if (message.length > 2000) { await editOriginal(interaction, { content: "Le message est trop long. La limite Discord est de 2000 caractères." }, config); return; }
+  await editOriginal(interaction, { content: "Le message va être envoyé…", components: [] }, config);
   await followUp(interaction, { content: message, allowed_mentions: { parse: ["users", "roles", "everyone"] } }, config);
-  try { await deleteOriginal(interaction, config); }
-  catch (error) { console.error("Impossible de supprimer la réponse technique de /say", error); }
 }
 
 async function handleRemoveWarningCommand(interaction: DiscordInteraction, config: BotConfig): Promise<void> {
