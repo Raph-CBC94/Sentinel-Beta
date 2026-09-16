@@ -25,3 +25,9 @@ Le script met maintenant à jour les commandes existantes avec `PATCH` et crée 
    ```
 
 Après cette synchronisation, Discord doit afficher les sept commandes définies par le script, dont `/say` et `/avis-ia`. Vercel ne lance pas automatiquement cette synchronisation lors d'un déploiement de la Function HTTP.
+
+## Signalements et bannissements
+
+La version actuelle ajoute `/signaler` et `/ban`. `/signaler` prend `message_id` et une raison optionnelle, puis publie le contenu du message dans `LOG_CHANNEL_ID` avec des boutons pour appliquer un avertissement niveau 1, un timeout d'une heure ou un bannissement. Les boutons utilisent les mêmes contrôles d'accès et envoient le MP de sanction.
+
+Avant d'utiliser `/ban` ou le bouton de bannissement, appliquer `supabase/ban-migration.sql` et renseigner `BAN_ROLE_IDS`. `LOG_CHANNEL_ID` est également nécessaire pour les signalements.

@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getBotConfig } from "./config.js";
 
-export type SanctionType = "warning" | "timeout";
+export type SanctionType = "warning" | "timeout" | "ban";
 export type SanctionStatus = "pending" | "applied" | "failed" | "removed";
 export type Sanction = {
   id: string; guild_id: string; member_id: string; member_tag: string; type: SanctionType; warning_level: number; reason: string; moderator_id: string; moderator_tag: string; created_at: string;

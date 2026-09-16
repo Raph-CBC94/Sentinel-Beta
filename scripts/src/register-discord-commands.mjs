@@ -19,6 +19,14 @@ const commandDefinitions = [
     { type: 3, name: "message", description: "Message à envoyer", max_length: 2000, required: true },
   ] },
   { name: "avis-ia", description: "Analyser les 50 derniers messages pour aider la modération" },
+  { name: "ban", description: "Bannir un membre du serveur", options: [
+    { type: 6, name: "membre", description: "Membre à bannir", required: true },
+    { type: 3, name: "raison", description: "Raison du bannissement", max_length: 500, required: true },
+  ] },
+  { name: "signaler", description: "Signaler un message à la modération", options: [
+    { type: 3, name: "message_id", description: "ID du message à signaler", max_length: 32, required: true },
+    { type: 3, name: "raison", description: "Pourquoi ce message doit être examiné", max_length: 500, required: false },
+  ] },
 ];
 
 const required = ["DISCORD_TOKEN", "DISCORD_CLIENT_ID", "DISCORD_GUILD_ID"];

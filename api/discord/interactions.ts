@@ -21,6 +21,7 @@ type DiscordInteraction = {
     name?: string;
     options?: InteractionOption[];
     custom_id?: string;
+    component_type?: number;
     values?: string[];
     resolved?: { users?: Record<string, DiscordUser>; members?: Record<string, DiscordMember> };
   };
@@ -82,9 +83,9 @@ async function guildNameOf(interaction: DiscordInteraction, config: BotConfig): 
   }
 }
 
-async function acknowledge(interaction: DiscordInteraction, type: 5 | 6, ephemeral: boolean, config: BotConfig): Promise<void> {
+async function acknowledge(interaction: DiscordInteraction, type: 4 | 5 | 6, ephemeral: boolean, config: BotConfig): Promise<void> {
   const body: { type: number; data?: { flags: number } } = { type };
-  if (type === 5 && ephemeral) body.data = { flags: EPHEMERAL };
+  if ((type === 4 || type === 5) && ephemeral) body.data = { flags: EPHEMERAL };
   await discordRequest(config, "/interactions/" + interaction.id + "/" + interaction.token + "/callback", { method: "POST", body: JSON.stringify(body) });
 }
 
@@ -100,7 +101,7 @@ function actorOf(interaction: DiscordInteraction): DiscordUser | null { return i
 function actorRoles(interaction: DiscordInteraction): string[] { return interaction.member?.roles ?? []; }
 function hasRole(interaction: DiscordInteraction, roleIds: string[]): boolean { return roleIds.length > 0 && roleIds.some((roleId) => actorRoles(interaction).includes(roleId)); }
 function hasUser(interaction: DiscordInteraction, userIds: string[]): boolean { const actor = actorOf(interaction); return Boolean(actor && userIds.includes(actor.id)); }
-function hasAnyModeratorAccess(interaction: DiscordInteraction, config: BotConfig): boolean { return hasRole(interaction, config.roles.warn) || hasRole(interaction, config.roles.timeout) || hasUser(interaction, config.removeWarningUserIds); }
+function hasAnyModeratorAccess(interaction: DiscordInteraction, config: BotConfig): boolean { return hasRole(interaction, config.roles.warn) || hasRole(interaction, config.roles.timeout) || hasRole(interaction, config.roles.ban) || hasUser(interaction, config.removeWarningUserIds); }
 function option(interaction: DiscordInteraction, name: string): string | null { const value = interaction.data?.options?.find((item) => item.name === name)?.value; return value === undefined ? null : String(value); }
 
 function targetOf(interaction: DiscordInteraction): TargetMember | null {
@@ -111,6 +112,16 @@ function targetOf(interaction: DiscordInteraction): TargetMember | null {
   const resolvedUser = user ?? member?.user;
   if (!resolvedUser) return null;
   return { id, tag: resolvedUser.username || resolvedUser.global_name || id };
+}
+
+async function memberOf(guildId: string, memberId: string, config: BotConfig): Promise<TargetMember> {
+  try {
+    const member = await discordRequest<DiscordMember>(config, "/guilds/" + guildId + "/members/" + memberId);
+    const user = member.user;
+    return { id: memberId, tag: user?.username || user?.global_name || memberId };
+  } catch {
+    return { id: memberId, tag: memberId };
+  }
 }
 
 function parseDuration(value: string): number | null {
@@ -152,6 +163,10 @@ async function getRecentChannelMessages(interaction: DiscordInteraction, config:
   if (!interaction.channel_id) return [];
   const messages = await discordRequest<DiscordChannelMessage[]>(config, "/channels/" + interaction.channel_id + "/messages?limit=50");
   return messages.reverse();
+}
+
+async function getMessage(channelId: string, messageId: string, config: BotConfig): Promise<DiscordChannelMessage> {
+  return discordRequest<DiscordChannelMessage>(config, "/channels/" + channelId + "/messages/" + messageId);
 }
 
 async function requestAiReview(messages: DiscordChannelMessage[], apiKey: string): Promise<string> {
@@ -216,14 +231,25 @@ async function sendLog(config: BotConfig, embed: unknown): Promise<void> {
   catch (error) { console.error("Could not send sanction log", error); }
 }
 
+async function sendReport(config: BotConfig, embed: unknown, components: unknown[]): Promise<void> {
+  if (!config.logChannelId) throw new Error("LOG_CHANNEL_ID n'est pas configuré");
+  await discordRequest(config, "/channels/" + config.logChannelId + "/messages", {
+    method: "POST",
+    body: JSON.stringify({ embeds: [embed], components, allowed_mentions: { parse: [] } }),
+  });
+}
+
 async function requireAccess(interaction: DiscordInteraction, allowed: boolean, action: string, config: BotConfig): Promise<boolean> {
   if (allowed) return true;
-  await editOriginal(interaction, { content: "Vous n'êtes pas autorisé à " + action + ".", components: [] }, config);
+  if (interaction.type === 3) await followUp(interaction, { content: "Vous n'êtes pas autorisé à " + action + ".", flags: EPHEMERAL }, config);
+  else await editOriginal(interaction, { content: "Vous n'êtes pas autorisé à " + action + ".", components: [] }, config);
   return false;
 }
 
-async function handleWarn(interaction: DiscordInteraction, config: BotConfig): Promise<void> {
-  const actor = actorOf(interaction); const target = targetOf(interaction); const reason = option(interaction, "raison")?.trim() || "Aucune raison précisée"; const levelInput = option(interaction, "niveau"); const warningLevel = Number(levelInput);
+type SanctionOverrides = { target?: TargetMember; reason?: string; warningLevel?: number; durationSeconds?: number };
+
+async function handleWarn(interaction: DiscordInteraction, config: BotConfig, overrides: SanctionOverrides = {}): Promise<void> {
+  const actor = actorOf(interaction); const target = overrides.target ?? targetOf(interaction); const reason = overrides.reason ?? (option(interaction, "raison")?.trim() || "Aucune raison précisée"); const levelInput = option(interaction, "niveau"); const warningLevel = overrides.warningLevel ?? Number(levelInput);
   if (!actor || !target) { await editOriginal(interaction, { content: "Ce membre n'est plus présent sur le serveur." }, config); return; }
   if (!(await requireAccess(interaction, hasRole(interaction, config.roles.warn), "attribuer un avertissement", config))) return;
   if (!Number.isInteger(warningLevel) || warningLevel < 1 || warningLevel > 5) { await editOriginal(interaction, { content: "Niveau d'avertissement invalide. Utilisez un nombre entre 1 et 5." }, config); return; }
@@ -231,12 +257,12 @@ async function handleWarn(interaction: DiscordInteraction, config: BotConfig): P
   const guildName = await guildNameOf(interaction, config);
   const dm = await notifyMember(config, target.id, "Vous avez reçu un avertissement de niveau **" + warningLevel + "/5** sur le serveur **" + guildName + "**.\nRaison : " + reason + "\nRéférence : " + referenceFor(sanction));
   await updateSanction(sanction.id, { dm_sent: dm.sent, dm_error: dm.error ?? null });
-  await editOriginal(interaction, { embeds: [sanctionEmbed("Avertissement ajouté", 0xf59e0b, sanction)] }, config);
+  await editOriginal(interaction, { embeds: [sanctionEmbed("Avertissement ajouté", 0xf59e0b, sanction)], components: [] }, config);
   await sendLog(config, sanctionEmbed("Avertissement enregistré", 0xf59e0b, sanction, [{ name: "Message privé", value: dm.sent ? "Envoyé" : "Échec : " + (dm.error || "inconnu") }]));
 }
 
-async function handleTimeout(interaction: DiscordInteraction, config: BotConfig): Promise<void> {
-  const actor = actorOf(interaction); const target = targetOf(interaction); const durationInput = option(interaction, "duree") || ""; const reason = option(interaction, "raison")?.trim() || "Aucune raison précisée"; const durationSeconds = parseDuration(durationInput);
+async function handleTimeout(interaction: DiscordInteraction, config: BotConfig, overrides: SanctionOverrides = {}): Promise<void> {
+  const actor = actorOf(interaction); const target = overrides.target ?? targetOf(interaction); const durationInput = option(interaction, "duree") || ""; const reason = overrides.reason ?? (option(interaction, "raison")?.trim() || "Aucune raison précisée"); const durationSeconds = overrides.durationSeconds ?? parseDuration(durationInput);
   if (!actor || !target) { await editOriginal(interaction, { content: "Ce membre n'est plus présent sur le serveur." }, config); return; }
   if (!(await requireAccess(interaction, hasRole(interaction, config.roles.timeout), "mettre un membre en sourdine", config))) return;
   if (!durationSeconds) { await editOriginal(interaction, { content: "Durée de sourdine invalide. Utilisez une valeur comme 30m, 2h ou 1d (maximum 28 jours)." }, config); return; }
@@ -253,8 +279,46 @@ async function handleTimeout(interaction: DiscordInteraction, config: BotConfig)
   const dm = await notifyMember(config, target.id, "Vous avez été mis en sourdine sur le serveur **" + guildName + "**.\nDurée : " + formatDuration(durationSeconds) + "\nFin : " + formatDate(expiresAt) + "\nRaison : " + reason + "\nRéférence : " + referenceFor(sanction));
   await updateSanction(sanction.id, { dm_sent: dm.sent, dm_error: dm.error ?? null });
   const appliedSanction = { ...sanction, status: "applied" as const };
-  await editOriginal(interaction, { embeds: [sanctionEmbed("Sourdine appliquée", 0xef4444, appliedSanction)] }, config);
+  await editOriginal(interaction, { embeds: [sanctionEmbed("Sourdine appliquée", 0xef4444, appliedSanction)], components: [] }, config);
   await sendLog(config, sanctionEmbed("Sourdine enregistrée", 0xef4444, appliedSanction, [{ name: "Message privé", value: dm.sent ? "Envoyé" : "Échec : " + (dm.error || "inconnu") }]));
+}
+
+async function handleBan(interaction: DiscordInteraction, config: BotConfig, overrides: SanctionOverrides = {}): Promise<void> {
+  const actor = actorOf(interaction);
+  const target = overrides.target ?? targetOf(interaction);
+  const reason = overrides.reason ?? (option(interaction, "raison")?.trim() || "Aucune raison précisée");
+  if (!actor || !target) { await editOriginal(interaction, { content: "Ce membre n'est plus présent sur le serveur." }, config); return; }
+  if (!(await requireAccess(interaction, hasRole(interaction, config.roles.ban), "bannir un membre", config))) return;
+
+  const sanction = await createSanction({
+    guild_id: interaction.guild_id!,
+    member_id: target.id,
+    member_tag: target.tag,
+    type: "ban",
+    warning_level: 1,
+    reason,
+    moderator_id: actor.id,
+    moderator_tag: actor.username || actor.id,
+    duration_seconds: null,
+    expires_at: null,
+    status: "pending",
+  });
+  const guildName = await guildNameOf(interaction, config);
+  const dm = await notifyMember(config, target.id, "Vous avez été banni du serveur **" + guildName + "**.\nRaison : " + reason + "\nRéférence : " + referenceFor(sanction));
+  try {
+    await discordRequest(config, "/guilds/" + interaction.guild_id + "/bans/" + target.id, {
+      method: "PUT",
+      body: JSON.stringify({ delete_message_seconds: 0 }),
+    });
+    await updateSanction(sanction.id, { status: "applied", dm_sent: dm.sent, dm_error: dm.error ?? null });
+  } catch (error) {
+    await updateSanction(sanction.id, { status: "failed", dm_sent: dm.sent, dm_error: error instanceof Error ? error.message.slice(0, 500) : "Le bannissement a échoué" });
+    await editOriginal(interaction, { content: "Le bannissement Discord a échoué. Vérifiez ma permission Bannir des membres.", components: [] }, config);
+    return;
+  }
+  const appliedSanction = { ...sanction, status: "applied" as const, dm_sent: dm.sent, dm_error: dm.error ?? null };
+  await editOriginal(interaction, { embeds: [sanctionEmbed("Bannissement appliqué", 0x991b1b, appliedSanction)], components: [] }, config);
+  await sendLog(config, sanctionEmbed("Bannissement enregistré", 0x991b1b, appliedSanction, [{ name: "Message privé", value: dm.sent ? "Envoyé" : "Échec : " + (dm.error || "inconnu") }]));
 }
 
 async function handleUntimeout(interaction: DiscordInteraction, config: BotConfig): Promise<void> {
@@ -279,9 +343,9 @@ async function handleHistory(interaction: DiscordInteraction, config: BotConfig)
   if (!(await requireAccess(interaction, hasAnyModeratorAccess(interaction, config), "consulter les historiques", config))) return;
   const history = await getMemberHistory(interaction.guild_id!, target.id);
   if (history.length === 0) { await editOriginal(interaction, { content: "<@" + target.id + "> ne possède aucune sanction enregistrée." }, config); return; }
-  const warnings = history.filter((sanction: Sanction) => sanction.type === "warning").length; const timeouts = history.filter((sanction: Sanction) => sanction.type === "timeout").length;
-  const intro = "**Historique de " + target.tag + "**\nAvertissements : **" + warnings + "** · Sourdines : **" + timeouts + "**\n\n";
-  const lines = history.map((sanction: Sanction) => { const duration = sanction.type === "timeout" ? " — " + formatDuration(sanction.duration_seconds) : ""; const level = sanction.type === "warning" ? " — Niveau " + sanction.warning_level + "/5" : ""; return referenceFor(sanction) + " **" + (sanction.type === "warning" ? "Avertissement" : "Sourdine") + "**" + level + duration + "\n" + sanction.reason + "\nPar <@" + sanction.moderator_id + "> · " + formatDate(sanction.created_at); });
+  const warnings = history.filter((sanction: Sanction) => sanction.type === "warning").length; const timeouts = history.filter((sanction: Sanction) => sanction.type === "timeout").length; const bans = history.filter((sanction: Sanction) => sanction.type === "ban").length;
+  const intro = "**Historique de " + target.tag + "**\nAvertissements : **" + warnings + "** · Sourdines : **" + timeouts + "** · Bannissements : **" + bans + "**\n\n";
+  const lines = history.map((sanction: Sanction) => { const duration = sanction.type === "timeout" ? " — " + formatDuration(sanction.duration_seconds) : ""; const level = sanction.type === "warning" ? " — Niveau " + sanction.warning_level + "/5" : ""; const label = sanction.type === "warning" ? "Avertissement" : sanction.type === "timeout" ? "Sourdine" : "Bannissement"; return referenceFor(sanction) + " **" + label + "**" + level + duration + "\n" + sanction.reason + "\nPar <@" + sanction.moderator_id + "> · " + formatDate(sanction.created_at); });
   const chunks: string[] = []; let current = intro;
   for (const line of lines) { if (current.length + line.length + 2 > 3900) { chunks.push(current); current = ""; } current += line + "\n\n"; }
   if (current) chunks.push(current);
@@ -317,6 +381,67 @@ async function handleAiReview(interaction: DiscordInteraction, config: BotConfig
   }
 }
 
+function isDiscordId(value: string): boolean { return /^\d{15,25}$/.test(value); }
+
+async function handleReport(interaction: DiscordInteraction, config: BotConfig): Promise<void> {
+  if (!config.logChannelId) { await editOriginal(interaction, { content: "Les signalements ne sont pas configurés. Ajoutez LOG_CHANNEL_ID dans l'environnement de déploiement.", components: [] }, config); return; }
+  if (!interaction.channel_id) { await editOriginal(interaction, { content: "Cette commande doit être utilisée dans un salon Discord.", components: [] }, config); return; }
+  const messageId = option(interaction, "message_id")?.trim() || "";
+  if (!isDiscordId(messageId)) { await editOriginal(interaction, { content: "ID de message invalide. Activez le mode développeur Discord et copiez l'ID du message.", components: [] }, config); return; }
+  const reportedMessage = await getMessage(interaction.channel_id, messageId, config);
+  const reportedAuthor = reportedMessage.author;
+  if (!reportedAuthor?.id) { await editOriginal(interaction, { content: "Impossible d'identifier l'auteur de ce message.", components: [] }, config); return; }
+
+  const reporter = actorOf(interaction);
+  const reason = option(interaction, "raison")?.trim() || "Aucune raison précisée";
+  const content = (reportedMessage.content || "[Message sans texte ou pièce jointe]").slice(0, 3900);
+  const authorName = reportedAuthor.global_name || reportedAuthor.username || reportedAuthor.id;
+  const jumpUrl = "https://discord.com/channels/" + interaction.guild_id + "/" + interaction.channel_id + "/" + messageId;
+  const embed = {
+    title: "Nouveau signalement",
+    color: 0xf97316,
+    description: content,
+    fields: [
+      { name: "Auteur", value: "<@" + reportedAuthor.id + ">", inline: true },
+      { name: "Signalé par", value: reporter ? "<@" + reporter.id + ">" : "Utilisateur inconnu", inline: true },
+      { name: "Salon", value: "<#" + interaction.channel_id + ">", inline: true },
+      { name: "Raison", value: reason.slice(0, 1024) },
+      { name: "Message", value: "[Ouvrir le message](" + jumpUrl + ")" },
+    ],
+    footer: { text: authorName + " · ID message : " + messageId },
+    timestamp: new Date().toISOString(),
+  };
+  const actionButtons = [{
+    type: 1,
+    components: [
+      { type: 2, style: 1, label: "Avertir (niveau 1)", custom_id: "signal:warn:" + interaction.channel_id + ":" + messageId + ":" + reportedAuthor.id },
+      { type: 2, style: 2, label: "Timeout (1 h)", custom_id: "signal:timeout:" + interaction.channel_id + ":" + messageId + ":" + reportedAuthor.id },
+      { type: 2, style: 4, label: "Bannir", custom_id: "signal:ban:" + interaction.channel_id + ":" + messageId + ":" + reportedAuthor.id },
+    ],
+  }];
+  await sendReport(config, embed, actionButtons);
+  await editOriginal(interaction, { content: "Signalement transmis à la modération.", components: [] }, config);
+}
+
+async function handleReportAction(interaction: DiscordInteraction, config: BotConfig): Promise<void> {
+  const parts = (interaction.data?.custom_id || "").split(":");
+  const action = parts[1];
+  const sourceChannelId = parts[2];
+  const messageId = parts[3];
+  const targetId = parts[4];
+  if (!["warn", "timeout", "ban"].includes(action) || !isDiscordId(sourceChannelId) || !isDiscordId(messageId) || !isDiscordId(targetId)) {
+    await editOriginal(interaction, { content: "Ce bouton de signalement n'est plus valide.", components: [] }, config);
+    return;
+  }
+  const target = await memberOf(interaction.guild_id!, targetId, config);
+  const sourceMessage = await getMessage(sourceChannelId, messageId, config).catch(() => null);
+  const sourceContent = sourceMessage?.content?.trim() || "message signalé";
+  const reason = "Signalement du message " + messageId + " : " + sourceContent.slice(0, 350);
+  if (action === "warn") await handleWarn(interaction, config, { target, reason, warningLevel: 1 });
+  else if (action === "timeout") await handleTimeout(interaction, config, { target, reason, durationSeconds: 60 * 60 });
+  else await handleBan(interaction, config, { target, reason });
+}
+
 async function handleRemoveWarningCommand(interaction: DiscordInteraction, config: BotConfig): Promise<void> {
   const target = targetOf(interaction);
   if (!target) { await editOriginal(interaction, { content: "Ce membre n'est plus présent sur le serveur." }, config); return; }
@@ -347,6 +472,7 @@ function commandNeedsEphemeral(interaction: DiscordInteraction, config: BotConfi
   if (name === "retirer-avertissement") return true;
   if (name === "avertir") return !hasRole(interaction, config.roles.warn);
   if (name === "sourdine" || name === "retirer-sourdine") return !hasRole(interaction, config.roles.timeout);
+  if (name === "ban") return !hasRole(interaction, config.roles.ban);
   if (name === "historique") return !hasAnyModeratorAccess(interaction, config);
   if (name === "say") return true;
   return true;
@@ -354,7 +480,11 @@ function commandNeedsEphemeral(interaction: DiscordInteraction, config: BotConfi
 
 async function processInteraction(interaction: DiscordInteraction, config: BotConfig): Promise<void> {
   if (!interaction.guild_id || !actorOf(interaction)) { await editOriginal(interaction, { content: "Cette interaction doit être utilisée dans un serveur Discord." }, config); return; }
-  if (interaction.type === 3) { await handleRemoveWarningSelection(interaction, config); return; }
+  if (interaction.type === 3) {
+    if (interaction.data?.component_type === 2) await handleReportAction(interaction, config);
+    else await handleRemoveWarningSelection(interaction, config);
+    return;
+  }
   switch (interaction.data?.name) {
     case "avertir": await handleWarn(interaction, config); break;
     case "sourdine": await handleTimeout(interaction, config); break;
@@ -363,6 +493,8 @@ async function processInteraction(interaction: DiscordInteraction, config: BotCo
     case "retirer-avertissement": await handleRemoveWarningCommand(interaction, config); break;
     case "say": await handleSay(interaction, config); break;
     case "avis-ia": await handleAiReview(interaction, config); break;
+    case "ban": await handleBan(interaction, config); break;
+    case "signaler": await handleReport(interaction, config); break;
     default: await editOriginal(interaction, { content: "Commande inconnue." }, config);
   }
 }

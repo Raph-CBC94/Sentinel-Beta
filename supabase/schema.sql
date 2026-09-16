@@ -3,7 +3,7 @@ create table if not exists public.sanctions (
   guild_id text not null,
   member_id text not null,
   member_tag text not null,
-  type text not null check (type in ('warning', 'timeout')),
+  type text not null check (type in ('warning', 'timeout', 'ban')),
   warning_level integer not null default 1 check (warning_level between 1 and 5),
   reason text not null,
   moderator_id text not null,
@@ -28,6 +28,13 @@ alter table public.sanctions
 alter table public.sanctions
   add constraint sanctions_warning_level_check
   check (warning_level between 1 and 5);
+
+alter table public.sanctions
+  drop constraint if exists sanctions_type_check;
+
+alter table public.sanctions
+  add constraint sanctions_type_check
+  check (type in ('warning', 'timeout', 'ban'));
 
 create index if not exists sanctions_member_history_idx
   on public.sanctions (guild_id, member_id, created_at desc);
