@@ -28,6 +28,6 @@ Après cette synchronisation, Discord doit afficher les sept commandes définies
 
 ## Signalements et bannissements
 
-La version actuelle ajoute `/signaler` et `/ban`. `/signaler` prend `message_id` et une raison optionnelle, puis publie le contenu du message dans `LOG_CHANNEL_ID` avec des boutons pour appliquer un avertissement niveau 1, un timeout d'une heure ou un bannissement. Les boutons utilisent les mêmes contrôles d'accès et envoient le MP de sanction.
+La version actuelle ajoute `/signaler` et `/ban`. `/signaler` prend `message_id` et une raison optionnelle, puis publie le contenu du message dans `LOG_CHANNEL_ID` avec des boutons. Le bouton Avertir ouvre une fenêtre pour choisir le niveau, le bouton Timeout ouvre une fenêtre pour choisir la durée, le bouton Bannir applique un bannissement permanent et le bouton Inutile ferme le signalement sans action. Les boutons utilisent les mêmes contrôles d'accès et envoient le MP de sanction.
 
 Avant d'utiliser `/ban` ou le bouton de bannissement, appliquer `supabase/ban-migration.sql` et renseigner `BAN_ROLE_IDS`. `LOG_CHANNEL_ID` est également nécessaire pour les signalements.

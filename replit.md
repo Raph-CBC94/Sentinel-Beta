@@ -28,4 +28,4 @@ Le token Discord, la clé publique et la clé service Supabase vont uniquement d
 
 Vercel déploie la Function HTTP mais n'enregistre pas les commandes slash dans Discord. Après avoir défini les variables serveur, lancer `pnpm run discord:register` une fois. Le script met à jour les commandes de ce projet et crée celles qui manquent sans remplacer les commandes d'autres versions.
 
-`/signaler` attend l'ID du message à signaler. Active le mode développeur Discord pour copier cet ID. Le signalement est envoyé dans `LOG_CHANNEL_ID` avec des boutons de sanction : avertissement niveau 1, sourdine d'une heure ou bannissement. `BAN_ROLE_IDS` contrôle l'accès à `/ban` et au bouton de bannissement.
+`/signaler` attend l'ID du message à signaler. Active le mode développeur Discord pour copier cet ID. Le signalement est envoyé dans `LOG_CHANNEL_ID` avec des boutons de sanction : avertissement (niveau demandé dans une fenêtre), timeout (durée demandée), bannissement permanent ou classement « Inutile ». `BAN_ROLE_IDS` contrôle l'accès à `/ban` et au bouton de bannissement.

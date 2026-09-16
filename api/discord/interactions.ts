@@ -17,12 +17,14 @@ type DiscordChannelMessage = { id: string; author?: DiscordUser; content?: strin
 type InteractionOption = { name: string; value?: string | number | boolean };
 type DiscordInteraction = {
   id: string; application_id: string; token: string; type: number; guild_id?: string; channel_id?: string; user?: DiscordUser; member?: DiscordMember;
+  message?: { id: string; channel_id?: string };
   data?: {
     name?: string;
     options?: InteractionOption[];
     custom_id?: string;
     component_type?: number;
     values?: string[];
+    components?: Array<{ components?: Array<{ custom_id?: string; value?: string }> }>;
     resolved?: { users?: Record<string, DiscordUser>; members?: Record<string, DiscordMember> };
   };
 };
@@ -83,14 +85,19 @@ async function guildNameOf(interaction: DiscordInteraction, config: BotConfig): 
   }
 }
 
-async function acknowledge(interaction: DiscordInteraction, type: 4 | 5 | 6, ephemeral: boolean, config: BotConfig): Promise<void> {
-  const body: { type: number; data?: { flags: number } } = { type };
-  if ((type === 4 || type === 5) && ephemeral) body.data = { flags: EPHEMERAL };
+async function acknowledge(interaction: DiscordInteraction, type: 4 | 5 | 6 | 9, ephemeral: boolean, config: BotConfig, data?: unknown): Promise<void> {
+  const body: { type: number; data?: unknown } = { type };
+  if (data !== undefined) body.data = data;
+  else if ((type === 4 || type === 5) && ephemeral) body.data = { flags: EPHEMERAL };
   await discordRequest(config, "/interactions/" + interaction.id + "/" + interaction.token + "/callback", { method: "POST", body: JSON.stringify(body) });
 }
 
 async function editOriginal(interaction: DiscordInteraction, payload: ResponsePayload, config: BotConfig): Promise<void> {
   await discordRequest(config, "/webhooks/" + interaction.application_id + "/" + interaction.token + "/messages/@original", { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+async function editChannelMessage(config: BotConfig, channelId: string, messageId: string, payload: ResponsePayload): Promise<void> {
+  await discordRequest(config, "/channels/" + channelId + "/messages/" + messageId, { method: "PATCH", body: JSON.stringify(payload) });
 }
 
 async function followUp(interaction: DiscordInteraction, payload: ResponsePayload, config: BotConfig): Promise<void> {
@@ -103,6 +110,13 @@ function hasRole(interaction: DiscordInteraction, roleIds: string[]): boolean { 
 function hasUser(interaction: DiscordInteraction, userIds: string[]): boolean { const actor = actorOf(interaction); return Boolean(actor && userIds.includes(actor.id)); }
 function hasAnyModeratorAccess(interaction: DiscordInteraction, config: BotConfig): boolean { return hasRole(interaction, config.roles.warn) || hasRole(interaction, config.roles.timeout) || hasRole(interaction, config.roles.ban) || hasUser(interaction, config.removeWarningUserIds); }
 function option(interaction: DiscordInteraction, name: string): string | null { const value = interaction.data?.options?.find((item) => item.name === name)?.value; return value === undefined ? null : String(value); }
+function modalValue(interaction: DiscordInteraction, name: string): string | null {
+  for (const row of interaction.data?.components ?? []) {
+    const value = row.components?.find((component) => component.custom_id === name)?.value;
+    if (value !== undefined) return value;
+  }
+  return null;
+}
 
 function targetOf(interaction: DiscordInteraction): TargetMember | null {
   const id = option(interaction, "membre");
@@ -414,9 +428,10 @@ async function handleReport(interaction: DiscordInteraction, config: BotConfig):
   const actionButtons = [{
     type: 1,
     components: [
-      { type: 2, style: 1, label: "Avertir (niveau 1)", custom_id: "signal:warn:" + interaction.channel_id + ":" + messageId + ":" + reportedAuthor.id },
-      { type: 2, style: 2, label: "Timeout (1 h)", custom_id: "signal:timeout:" + interaction.channel_id + ":" + messageId + ":" + reportedAuthor.id },
+      { type: 2, style: 1, label: "Avertir", custom_id: "signal:warn:" + interaction.channel_id + ":" + messageId + ":" + reportedAuthor.id },
+      { type: 2, style: 2, label: "Timeout", custom_id: "signal:timeout:" + interaction.channel_id + ":" + messageId + ":" + reportedAuthor.id },
       { type: 2, style: 4, label: "Bannir", custom_id: "signal:ban:" + interaction.channel_id + ":" + messageId + ":" + reportedAuthor.id },
+      { type: 2, style: 2, label: "Inutile", custom_id: "signal:dismiss:" + interaction.channel_id + ":" + messageId + ":" + reportedAuthor.id },
     ],
   }];
   await sendReport(config, embed, actionButtons);
@@ -429,17 +444,54 @@ async function handleReportAction(interaction: DiscordInteraction, config: BotCo
   const sourceChannelId = parts[2];
   const messageId = parts[3];
   const targetId = parts[4];
-  if (!["warn", "timeout", "ban"].includes(action) || !isDiscordId(sourceChannelId) || !isDiscordId(messageId) || !isDiscordId(targetId)) {
+  if (!["ban", "dismiss"].includes(action) || !isDiscordId(sourceChannelId) || !isDiscordId(messageId) || !isDiscordId(targetId)) {
     await editOriginal(interaction, { content: "Ce bouton de signalement n'est plus valide.", components: [] }, config);
+    return;
+  }
+  if (action === "dismiss") {
+    const actor = actorOf(interaction);
+    await editOriginal(interaction, { content: "Signalement classé comme inutile" + (actor ? " par <@" + actor.id + ">." : "."), components: [] }, config);
     return;
   }
   const target = await memberOf(interaction.guild_id!, targetId, config);
   const sourceMessage = await getMessage(sourceChannelId, messageId, config).catch(() => null);
   const sourceContent = sourceMessage?.content?.trim() || "message signalé";
   const reason = "Signalement du message " + messageId + " : " + sourceContent.slice(0, 350);
-  if (action === "warn") await handleWarn(interaction, config, { target, reason, warningLevel: 1 });
-  else if (action === "timeout") await handleTimeout(interaction, config, { target, reason, durationSeconds: 60 * 60 });
-  else await handleBan(interaction, config, { target, reason });
+  await handleBan(interaction, config, { target, reason });
+}
+
+async function handleReportModal(interaction: DiscordInteraction, config: BotConfig): Promise<void> {
+  const parts = (interaction.data?.custom_id || "").split(":");
+  const action = parts[1];
+  const sourceChannelId = parts[2];
+  const messageId = parts[3];
+  const targetId = parts[4];
+  if (!["warn", "timeout"].includes(action) || !isDiscordId(sourceChannelId) || !isDiscordId(messageId) || !isDiscordId(targetId)) {
+    await editOriginal(interaction, { content: "Ce formulaire de signalement n'est plus valide.", components: [] }, config);
+    return;
+  }
+  const target = await memberOf(interaction.guild_id!, targetId, config);
+  const sourceMessage = await getMessage(sourceChannelId, messageId, config).catch(() => null);
+  const sourceContent = sourceMessage?.content?.trim() || "message signalé";
+  const reason = "Signalement du message " + messageId + " : " + sourceContent.slice(0, 350);
+  if (action === "warn") {
+    const level = Number(modalValue(interaction, "niveau"));
+    if (!Number.isInteger(level) || level < 1 || level > 5) {
+      await editOriginal(interaction, { content: "Niveau invalide. Choisissez un nombre entre 1 et 5.", components: [] }, config);
+      return;
+    }
+    await handleWarn(interaction, config, { target, reason, warningLevel: level });
+  } else {
+    const duration = parseDuration(modalValue(interaction, "duree") || "");
+    if (!duration) {
+      await editOriginal(interaction, { content: "Durée invalide. Utilisez une valeur comme 30m, 2h ou 1d.", components: [] }, config);
+      return;
+    }
+    await handleTimeout(interaction, config, { target, reason, durationSeconds: duration });
+  }
+  if (interaction.message?.channel_id && interaction.message.id) {
+    await editChannelMessage(config, interaction.message.channel_id, interaction.message.id, { components: [] });
+  }
 }
 
 async function handleRemoveWarningCommand(interaction: DiscordInteraction, config: BotConfig): Promise<void> {
@@ -478,8 +530,36 @@ function commandNeedsEphemeral(interaction: DiscordInteraction, config: BotConfi
   return true;
 }
 
+function reportModalData(interaction: DiscordInteraction): { custom_id: string; title: string; components: unknown[] } | null {
+  if (interaction.type !== 3 || interaction.data?.component_type !== 2) return null;
+  const customId = interaction.data.custom_id || "";
+  const action = customId.split(":")[1];
+  if (action === "warn") {
+    return {
+      custom_id: "signal-modal:" + customId.slice("signal:".length),
+      title: "Avertir la personne signalée",
+      components: [{
+        type: 1,
+        components: [{ type: 4, custom_id: "niveau", style: 1, label: "Niveau (1 à 5)", min_length: 1, max_length: 1, required: true, placeholder: "1" }],
+      }],
+    };
+  }
+  if (action === "timeout") {
+    return {
+      custom_id: "signal-modal:" + customId.slice("signal:".length),
+      title: "Mettre en timeout",
+      components: [{
+        type: 1,
+        components: [{ type: 4, custom_id: "duree", style: 1, label: "Durée (ex. 30m, 2h ou 1d)", min_length: 2, max_length: 10, required: true, placeholder: "1h" }],
+      }],
+    };
+  }
+  return null;
+}
+
 async function processInteraction(interaction: DiscordInteraction, config: BotConfig): Promise<void> {
   if (!interaction.guild_id || !actorOf(interaction)) { await editOriginal(interaction, { content: "Cette interaction doit être utilisée dans un serveur Discord." }, config); return; }
+  if (interaction.type === 5) { await handleReportModal(interaction, config); return; }
   if (interaction.type === 3) {
     if (interaction.data?.component_type === 2) await handleReportAction(interaction, config);
     else await handleRemoveWarningSelection(interaction, config);
@@ -509,11 +589,13 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   let interaction: DiscordInteraction;
   try { interaction = JSON.parse(rawBody) as DiscordInteraction; } catch { json(res, 400, { error: "Invalid JSON" }); return; }
   if (interaction.type === 1) { json(res, 200, { type: 1 }); return; }
-  if (interaction.type !== 2 && interaction.type !== 3) { json(res, 400, { error: "Unsupported interaction type" }); return; }
+  if (interaction.type !== 2 && interaction.type !== 3 && interaction.type !== 5) { json(res, 400, { error: "Unsupported interaction type" }); return; }
   const botConfig = getBotConfig();
+  const modal = reportModalData(interaction);
   const ephemeral = interaction.type === 3 || commandNeedsEphemeral(interaction, botConfig);
-  try { await acknowledge(interaction, interaction.type === 3 ? 6 : 5, ephemeral, botConfig); }
+  try { await acknowledge(interaction, modal ? 9 : interaction.type === 3 ? 6 : 5, ephemeral, botConfig, modal ?? undefined); }
   catch (error) { console.error("Could not acknowledge Discord interaction", error); json(res, 500, { error: "Could not acknowledge interaction" }); return; }
+  if (modal) { res.statusCode = 204; res.end(); return; }
   try { await processInteraction(interaction, botConfig); }
   catch (error) { console.error("Discord interaction failed", error); await editOriginal(interaction, { content: "Une erreur interne est survenue. La commande n'a pas pu être finalisée.", components: [] }, botConfig).catch(() => undefined); }
   res.statusCode = 204;
