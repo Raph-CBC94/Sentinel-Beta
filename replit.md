@@ -20,6 +20,10 @@ Bot Discord de modération avec avertissements, mises en sourdine, historique pe
 
 ## Variables nécessaires
 
-DISCORD_TOKEN, DISCORD_PUBLIC_KEY, DISCORD_CLIENT_ID, DISCORD_GUILD_ID, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, WARN_ROLE_IDS, TIMEOUT_ROLE_IDS, REMOVE_WARNING_USER_IDS et éventuellement LOG_CHANNEL_ID.
+DISCORD_TOKEN, DISCORD_PUBLIC_KEY, DISCORD_CLIENT_ID, DISCORD_GUILD_ID, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, WARN_ROLE_IDS, TIMEOUT_ROLE_IDS, REMOVE_WARNING_USER_IDS, GROQ_API_KEY pour `/avis-ia` et éventuellement LOG_CHANNEL_ID.
 
 Le token Discord, la clé publique et la clé service Supabase vont uniquement dans les variables d'environnement Vercel. Ne jamais les committer.
+
+## Réenregistrer les commandes Discord
+
+Vercel déploie la Function HTTP mais n'enregistre pas les commandes slash dans Discord. Après avoir défini les variables serveur, lancer `pnpm run discord:register` une fois. Le script met à jour les commandes de ce projet et crée celles qui manquent sans remplacer les commandes d'autres versions.
