@@ -470,6 +470,8 @@ async function handleReportModal(interaction: DiscordInteraction, config: BotCon
     await editOriginal(interaction, { content: "Ce formulaire de signalement n'est plus valide.", components: [] }, config);
     return;
   }
+  const allowed = action === "warn" ? hasRole(interaction, config.roles.warn) : hasRole(interaction, config.roles.timeout);
+  if (!(await requireAccess(interaction, allowed, action === "warn" ? "attribuer un avertissement" : "mettre un membre en sourdine", config))) return;
   const target = await memberOf(interaction.guild_id!, targetId, config);
   const sourceMessage = await getMessage(sourceChannelId, messageId, config).catch(() => null);
   const sourceContent = sourceMessage?.content?.trim() || "message signalé";
