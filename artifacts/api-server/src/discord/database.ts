@@ -42,6 +42,26 @@ export async function getMemberHistory(guildId: string, memberId: string): Promi
   const { data, error } = await getDatabase().from("sanctions").select("*").eq("guild_id", guildId).eq("member_id", memberId).neq("status", "failed").neq("status", "removed").order("created_at", { ascending: false }).returns<Sanction[]>();
   throwIfError(error); return data ?? [];
 }
+export async function getGlobalWarnings(guildId: string): Promise<Sanction[]> {
+  const warnings: Sanction[] = [];
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await getDatabase()
+      .from("sanctions")
+      .select("*")
+      .eq("guild_id", guildId)
+      .eq("type", "warning")
+      .neq("status", "failed")
+      .neq("status", "removed")
+      .order("created_at", { ascending: false })
+      .range(offset, offset + pageSize - 1)
+      .returns<Sanction[]>();
+    throwIfError(error);
+    const page = data ?? [];
+    warnings.push(...page);
+    if (page.length < pageSize) return warnings;
+  }
+}
 export async function recordEvent(input: { guildId: string; memberId: string; moderatorId: string; action: "untimeout"; reason: string }): Promise<void> {
   const { error } = await getDatabase().from("sanction_events").insert({ guild_id: input.guildId, member_id: input.memberId, moderator_id: input.moderatorId, action: input.action, reason: input.reason }); throwIfError(error);
 }

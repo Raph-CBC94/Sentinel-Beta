@@ -2,6 +2,7 @@ import { createPublicKey, verify } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
   createSanction,
+  getGlobalWarnings,
   getMemberHistory,
   recordEvent,
   removeActiveTimeouts,
@@ -367,6 +368,25 @@ async function handleHistory(interaction: DiscordInteraction, config: BotConfig)
   for (const chunk of chunks.slice(1)) await followUp(interaction, { content: chunk }, config);
 }
 
+async function handleGlobalHistory(interaction: DiscordInteraction, config: BotConfig): Promise<void> {
+  if (!(await requireAccess(interaction, hasAnyModeratorAccess(interaction, config), "consulter les historiques", config))) return;
+  const warnings = await getGlobalWarnings(interaction.guild_id!);
+  if (warnings.length === 0) {
+    await editOriginal(interaction, { content: "Aucun avertissement enregistré pour les membres de ce serveur.", allowed_mentions: { parse: [] } }, config);
+    return;
+  }
+  const intro = "**Historique global des avertissements**\nTotal : **" + warnings.length + "**\n\n";
+  const lines = warnings.map((warning: Sanction) => {
+    return "**" + warning.member_tag + "** (<@" + warning.member_id + ">) — " + referenceFor(warning) + " · Niveau " + warning.warning_level + "/5\n"
+      + warning.reason + "\nPar <@" + warning.moderator_id + "> · " + formatDate(warning.created_at);
+  });
+  const chunks = splitDiscordMessage(intro + lines.join("\n\n"));
+  await editOriginal(interaction, { content: chunks[0], allowed_mentions: { parse: [] } }, config);
+  for (const chunk of chunks.slice(1)) {
+    await followUp(interaction, { content: chunk, flags: EPHEMERAL, allowed_mentions: { parse: [] } }, config);
+  }
+}
+
 async function handleSay(interaction: DiscordInteraction, config: BotConfig): Promise<void> {
   const message = option(interaction, "message")?.trim() || "";
   if (!(await requireAccess(interaction, hasAnyModeratorAccess(interaction, config), "faire parler le bot", config))) return;
@@ -527,7 +547,7 @@ function commandNeedsEphemeral(interaction: DiscordInteraction, config: BotConfi
   if (name === "avertir") return !hasRole(interaction, config.roles.warn);
   if (name === "sourdine" || name === "retirer-sourdine") return !hasRole(interaction, config.roles.timeout);
   if (name === "ban") return !hasRole(interaction, config.roles.ban);
-  if (name === "historique") return !hasAnyModeratorAccess(interaction, config);
+  if (name === "historique" || name === "historique-global") return !hasAnyModeratorAccess(interaction, config);
   if (name === "say") return true;
   return true;
 }
@@ -572,6 +592,7 @@ async function processInteraction(interaction: DiscordInteraction, config: BotCo
     case "sourdine": await handleTimeout(interaction, config); break;
     case "retirer-sourdine": await handleUntimeout(interaction, config); break;
     case "historique": await handleHistory(interaction, config); break;
+    case "historique-global": await handleGlobalHistory(interaction, config); break;
     case "retirer-avertissement": await handleRemoveWarningCommand(interaction, config); break;
     case "say": await handleSay(interaction, config); break;
     case "avis-ia": await handleAiReview(interaction, config); break;

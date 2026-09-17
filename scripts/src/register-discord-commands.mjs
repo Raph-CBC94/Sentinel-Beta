@@ -14,6 +14,7 @@ const commandDefinitions = [
     { type: 3, name: "raison", description: "Raison du retrait", max_length: 500, required: false },
   ] },
   { name: "historique", description: "Consulter l'historique des sanctions", options: [{ type: 6, name: "membre", description: "Membre à consulter", required: true }] },
+  { name: "historique-global", description: "Voir tous les avertissements du serveur" },
   { name: "retirer-avertissement", description: "Choisir l'avertissement à retirer", options: [{ type: 6, name: "membre", description: "Membre concerné", required: true }] },
   { name: "say", description: "Faire parler le bot dans ce salon", options: [
     { type: 3, name: "message", description: "Message à envoyer", max_length: 2000, required: true },
